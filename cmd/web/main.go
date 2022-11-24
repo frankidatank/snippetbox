@@ -1,31 +1,41 @@
 package main
 
 import (
+	"flag"
 	"log"
 	"net/http"
+	"os"
 )
 
+// Define an application struct to hold the application-wide dependencies for the
+// web application. For now we'll only include fields for the two custom loggers, but
+// we'll add more to it as the build progresses.
+type application struct {
+	errorLog *log.Logger
+	infoLog  *log.Logger
+}
+
 func main() {
-	//router or servemux in go terms
-	mux := http.NewServeMux()
-	// Create a file server which serves files out of the "./ui/static" directory.
-	// Note that the path given to the http.Dir function is relative to the project
-	// directory root.
-	fileServer := http.FileServer(http.Dir("./ui/static/"))
+	addr := flag.String("addr", ":4000", "HTTP network address")
 
-	// Use the mux.Handle() function to register the file server as the handler for
-	// all URL paths that start with "/static/". For matching paths, we strip the
-	// "/static" prefix before the request reaches the file server.
-	mux.Handle("/static/", http.StripPrefix("/static", fileServer))
+	flag.Parse()
 
-	mux.HandleFunc("/", home)
+	infoLog := log.New(os.Stdout, "INFO\t", log.Ldate|log.Ltime)
+	errorLog := log.New(os.Stderr, "ERROR\t", log.Ldate|log.Ltime|log.Lshortfile)
 
-	mux.HandleFunc("/snippet/create", snippetCreate)
+	app := &application{
+		errorLog: errorLog,
+		infoLog:  infoLog,
+	}
 
-	mux.HandleFunc("/snippet/view", snippetView)
+	srv := &http.Server{
+		Addr:     *addr,
+		ErrorLog: errorLog,
+		// Call the new app.routes() method to get the servemux containing our routes.
+		Handler: app.routes(),
+	}
 
-	log.Println("Starting server on :4000")
-	//server
-	err := http.ListenAndServe(":4000", mux)
-	log.Fatal(err)
+	infoLog.Printf("Starting server on %s", *addr)
+	err := srv.ListenAndServe()
+	errorLog.Fatal(err)
 }
